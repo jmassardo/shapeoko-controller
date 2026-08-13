@@ -21,6 +21,9 @@ __pycache__/
 # --- Dispatcher scratch (must NEVER be committed) ---
 .dispatch/
 
+# --- PlatformIO firmware build artifacts (firmware/panel) ---
+.pio/
+
 # --- Editor / OS noise ---
 .DS_Store
 .idea/

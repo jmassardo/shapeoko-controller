@@ -1,0 +1,29 @@
+# --- Node / TypeScript workspaces ---
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# Test / coverage output
+coverage/
+.vitest/
+
+# --- Python (contributors create venvs for hardware/) ---
+# NOTE: hardware/ has its own .gitignore; these root patterns are additive
+# and must not weaken it.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
+# --- Dispatcher scratch (must NEVER be committed) ---
+.dispatch/
+
+# --- Editor / OS noise ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~

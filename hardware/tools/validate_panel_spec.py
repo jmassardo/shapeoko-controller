@@ -4,8 +4,19 @@
 Pipeline (all failures are collected and reported, not just the first):
   1. YAML load        — malformed YAML fails with the parse location.
   2. Schema validation — structure / types / closed control-type enum.
-  3. Geometry          — cutout overlap, panel-outline containment, minimum web.
+  3. Geometry          — cutout overlap, panel-outline containment, minimum web,
+                         and PHYSICAL BODY interference (body-to-body, body-to-
+                         cutout, body containment, body-to-label-zone).
   4. Safety distances  — the load-bearing rules fixed in issue #115.
+
+Cutout rules and body rules are deliberately BOTH enforced and are not the same
+rule expressed twice:
+  * `min_web` is a MATERIAL-STRENGTH rule. It is about how much panel stock is
+    left standing between two holes, so it applies to cutouts only.
+  * The body rules are INTERFERENCE rules. They are about components fouling one
+    another, fouling a neighbouring hole, or covering a neighbour's printed
+    legend. Two bodies may legally sit closer together than `min_web`; they
+    simply may not intersect.
 
 Exit code 0 and a control count are printed only when the spec is fully valid.
 Any failure exits non-zero and no "valid" summary is emitted.
@@ -125,6 +136,55 @@ def cutout_bbox(control: dict) -> tuple[float, float, float, float]:
     return (cx - w / 2.0, cy - h / 2.0, cx + w / 2.0, cy + h / 2.0)
 
 
+def body_bbox(control: dict) -> tuple[float, float, float, float]:
+    """Axis-aligned bounding box of a control's PHYSICAL BODY envelope.
+
+    The body is what the operator's hand actually meets: the mushroom head, the
+    knob skirt, the handwheel rim. It is regularly LARGER than the cutout it
+    mounts through (the MPG is a Ø76 wheel on a Ø50 boss recess — it overhangs
+    the panel by 13 mm all round), so validating cutouts alone silently misses
+    real interference. See issue #116 review.
+
+    For round cutouts the envelope is `body_diameter`, defaulting to the cutout
+    diameter when absent (correct for flush or near-flush components). For rect
+    cutouts there is no separate body dimension, so the cutout box is used.
+    """
+    cut = control["cutout"]
+    if cut["kind"] != "round":
+        return cutout_bbox(control)
+    cx, cy = float(control["x"]), float(control["y"])
+    r = float(control.get("body_diameter", cut["diameter"])) / 2.0
+    return (cx - r, cy - r, cx + r, cy + r)
+
+
+def label_zone_bbox(control: dict) -> tuple[float, float, float, float] | None:
+    """AABB of a control's reserved legend area, or None if it declares no zone.
+
+    Expressed TOP-LEFT origin (x, y, w, h) in the spec, matching the E-stop
+    `plate` convention, because a legend is an area rather than a centre.
+    """
+    zone = control.get("label_zone")
+    if not zone:
+        return None
+    x0, y0 = float(zone["x"]), float(zone["y"])
+    return (x0, y0, x0 + float(zone["w"]), y0 + float(zone["h"]))
+
+
+def bbox_overlap(a: tuple, b: tuple) -> tuple[float, float] | None:
+    """Overlap depth (dx, dy) of two AABBs, or None when they do not intersect.
+
+    Touching exactly (zero-width intersection) is NOT an overlap — components
+    may sit shoulder to shoulder.
+    """
+    ax0, ay0, ax1, ay1 = a
+    bx0, by0, bx1, by1 = b
+    dx = min(ax1, bx1) - max(ax0, bx0)
+    dy = min(ay1, by1) - max(ay0, by0)
+    if dx <= 0 or dy <= 0:
+        return None
+    return (dx, dy)
+
+
 def bbox_gap(a: tuple, b: tuple) -> float:
     """Edge-to-edge gap between two AABBs. Negative == overlap by that amount."""
     ax0, ay0, ax1, ay1 = a
@@ -175,6 +235,102 @@ def validate_geometry(spec: dict) -> list[str]:
                     f"geometry: control cutouts '{a}' and '{b}' violate the minimum "
                     f"web ({gap:.2f} mm < {min_web} mm required)"
                 )
+
+    errors.extend(validate_bodies(spec))
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Physical body (interference) validation — issue #116 review
+# ---------------------------------------------------------------------------
+def validate_bodies(spec: dict) -> list[str]:
+    """Validate PHYSICAL BODY envelopes, not just the holes they mount through.
+
+    Four independent rules, all collected (never raised early):
+      * body-to-body      — no two component bodies may intersect.
+      * body-to-cutout    — a body may not overhang a DIFFERENT control's cutout.
+      * body containment  — every body must lie fully inside the panel outline.
+      * body-to-label     — a body may not intrude on another control's legend.
+
+    `min_web` is deliberately NOT applied here: it is a material-strength rule
+    about stock left between holes. Bodies may sit closer than the web; they
+    just may not touch.
+    """
+    errors: list[str] = []
+    panel = spec["panel"]
+    width = float(panel["width"])
+    height = float(panel["height"])
+    controls = spec["controls"]
+
+    bodies = {c["id"]: body_bbox(c) for c in controls}
+    cutouts = {c["id"]: cutout_bbox(c) for c in controls}
+    zones = {c["id"]: z for c in controls if (z := label_zone_bbox(c)) is not None}
+
+    # A body smaller than its own cutout is a transcription error: it would
+    # silently under-report every rule below.
+    for c in controls:
+        cut = c["cutout"]
+        if cut["kind"] != "round" or "body_diameter" not in c:
+            continue
+        body_d, cut_d = float(c["body_diameter"]), float(cut["diameter"])
+        if body_d < cut_d:
+            errors.append(
+                f"geometry: control '{c['id']}' body_diameter {body_d:.2f} mm is smaller "
+                f"than its cutout diameter {cut_d:.2f} mm (by {cut_d - body_d:.2f} mm); "
+                f"a component body cannot be smaller than the hole it mounts in"
+            )
+
+    # Containment: every body envelope must lie fully inside the panel outline.
+    for c in controls:
+        cid = c["id"]
+        x0, y0, x1, y1 = bodies[cid]
+        if x0 < 0 or y0 < 0 or x1 > width or y1 > height:
+            over = max(-x0, -y0, x1 - width, y1 - height)
+            errors.append(
+                f"geometry: control '{cid}' body envelope crosses the panel outline "
+                f"(by {over:.2f} mm; bbox=({x0:.2f},{y0:.2f},{x1:.2f},{y1:.2f}), "
+                f"panel={width}x{height})"
+            )
+
+    ids = [c["id"] for c in controls]
+
+    # Body-to-body: two components physically fouling one another.
+    for i in range(len(ids)):
+        for j in range(i + 1, len(ids)):
+            a, b = ids[i], ids[j]
+            hit = bbox_overlap(bodies[a], bodies[b])
+            if hit:
+                errors.append(
+                    f"geometry: control bodies '{a}' and '{b}' overlap "
+                    f"(by {hit[0]:.2f} mm in x, {hit[1]:.2f} mm in y)"
+                )
+
+    # Body-to-cutout: a body overhanging a DIFFERENT control's hole.
+    for a in ids:
+        for b in ids:
+            if a == b:
+                continue
+            hit = bbox_overlap(bodies[a], cutouts[b])
+            if hit:
+                errors.append(
+                    f"geometry: control body '{a}' overhangs the cutout of '{b}' "
+                    f"(by {hit[0]:.2f} mm in x, {hit[1]:.2f} mm in y)"
+                )
+
+    # Body-to-label-zone: a body sitting on top of a neighbour's printed legend.
+    # This is the rule that catches the #116 defect directly: at the pre-
+    # transform MPG centre the Ø76 wheel covered RESET's sub-label.
+    for a in ids:
+        for b, zone in zones.items():
+            if a == b:
+                continue
+            hit = bbox_overlap(bodies[a], zone)
+            if hit:
+                errors.append(
+                    f"geometry: control body '{a}' intrudes on the label_zone of '{b}' "
+                    f"(by {hit[0]:.2f} mm in x, {hit[1]:.2f} mm in y)"
+                )
+
     return errors
 
 

@@ -69,14 +69,27 @@
         "x": { "type": "number" },
         "y": { "type": "number" },
         "safety_critical": { "type": "boolean" },
+        "body_diameter": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Diameter of the PHYSICAL component body in mm, for round-cutout controls only. This is the envelope that sits proud of the panel (mushroom head, knob skirt, handwheel rim), which is frequently LARGER than the cutout it mounts through. Optional: when absent it defaults to cutout.diameter, which is correct for flush or near-flush components. It must never be smaller than cutout.diameter — a body cannot be smaller than the hole it mounts in."
+        },
         "cutout": { "$ref": "#/definitions/cutout" },
         "plate": { "$ref": "#/definitions/plate" },
+        "label_zone": { "$ref": "#/definitions/label_zone" },
         "notes": { "type": "string" }
       },
       "allOf": [
         {
           "if": { "properties": { "type": { "const": "estop_mushroom" } } },
           "then": { "required": ["plate"] }
+        },
+        {
+          "if": {
+            "properties": { "cutout": { "properties": { "kind": { "const": "rect" } } } },
+            "required": ["cutout"]
+          },
+          "then": { "not": { "required": ["body_diameter"] } }
         }
       ]
     },
@@ -112,6 +125,19 @@
       "properties": {
         "w": { "type": "number", "exclusiveMinimum": 0 },
         "h": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "label_zone": {
+      "type": "object",
+      "description": "Rectangular area of panel reserved for this control's printed legend, in panel coordinates with a TOP-LEFT origin (x, y, w, h) — the same convention as the E-stop `plate`, because a legend is an area, not a control centre. No OTHER control's body envelope may intrude into this rectangle.",
+      "additionalProperties": false,
+      "required": ["x", "y", "w", "h"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "w": { "type": "number", "exclusiveMinimum": 0 },
+        "h": { "type": "number", "exclusiveMinimum": 0 },
+        "derived_from": { "type": "string" }
       }
     },
     "plate": {

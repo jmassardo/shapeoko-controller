@@ -9,6 +9,7 @@ into a violating position and assert the validator catches them.
 from __future__ import annotations
 
 import copy
+import math
 from pathlib import Path
 
 import pytest
@@ -274,3 +275,275 @@ def test_dsi_module_envelope_within_panel(spec):
     # the top-left corner).
     errors = v.validate_geometry(spec)
     assert not any("dsi_screen" in e for e in errors), errors
+
+
+# ---------------------------------------------------------------------------
+# Defect #116-a — MPG centre must be the RENDERED (post-transform) coordinate
+# ---------------------------------------------------------------------------
+def test_mpg_centre_is_the_post_transform_coordinate(spec):
+    """Regression pin for the #116 review defect.
+
+    docs/hardware/panel-mockup.svg wraps the MPG group in
+        transform="translate(285,192) scale(0.94) translate(-283,-187)"
+    so the RENDERED centre is (285,192). The pre-transform (283,187) was
+    transcribed by mistake, reverting a deliberate layout fix that kept the
+    Ø76 wheel off RESET's sub-label. Do not "restore" (283,187).
+    """
+    mpg = _find(spec, "mpg")
+    assert (mpg["x"], mpg["y"]) == (285, 192)
+
+
+def test_mpg_records_physical_body_not_the_scaled_drawing(spec):
+    # scale(0.94) shrank the DRAWING only; the real handwheel is Ø76.
+    assert _find(spec, "mpg")["body_diameter"] == 76
+    assert _find(spec, "mpg")["cutout"]["diameter"] == 50.0
+
+
+def test_mpg_fix_does_not_weaken_the_enable_distance_rule(spec):
+    """The fix must IMPROVE, not erode, the #115 ENABLE↔MPG margin."""
+    enable, mpg = _find(spec, "enable"), _find(spec, "mpg")
+    d = math.dist((enable["x"], enable["y"]), (mpg["x"], mpg["y"]))
+    assert d == pytest.approx(255.20, abs=0.01)          # sqrt(255² + 10²)
+    assert d >= v.SAFETY_MIN_ENABLE_TO_MPG_MM
+    assert d > math.dist((enable["x"], enable["y"]), (283, 187))  # was 253.05
+
+
+def test_pre_transform_mpg_position_is_rejected_by_the_body_rules(spec):
+    """The exact defect must now FAIL validation, not pass silently."""
+    mpg = _find(spec, "mpg")
+    mpg["x"], mpg["y"] = 283, 187
+    errors = v.validate_geometry(spec)
+    assert any("label_zone of 'reset'" in e and "'mpg'" in e for e in errors), errors
+    # ...and it was invisible to the cutout and safety rules, which is the
+    # systemic gap this defect exposed.
+    assert v.validate_safety(spec) == []
+    assert not any("cutouts" in e for e in errors), errors
+
+
+def test_safety_constants_are_unchanged():
+    assert v.SAFETY_MIN_ENABLE_TO_MPG_MM == 250.0
+    assert v.SAFETY_MIN_RESET_TO_ESTOP_MM == 75.0
+
+
+# ---------------------------------------------------------------------------
+# Defect #116-b — body envelopes, not just cutouts
+# ---------------------------------------------------------------------------
+def _synthetic(*controls: dict, width: float = 340, height: float = 290) -> dict:
+    """Minimal well-formed spec for exercising a single geometry rule."""
+    return {
+        "panel": {
+            "units": "mm", "width": width, "height": height,
+            "corner_radius": 7, "min_web": 6,
+            "mounting_holes": [{"id": "mh", "x": 8, "y": 8, "diameter": 4.5}],
+        },
+        "controls": list(controls),
+    }
+
+
+def _round(cid: str, x: float, y: float, dia: float, **extra) -> dict:
+    c = {
+        "id": cid, "label": cid.upper(), "type": "illuminated_button_22",
+        "x": x, "y": y, "safety_critical": False,
+        "cutout": {"kind": "round", "diameter": dia}, "notes": "synthetic",
+    }
+    c.update(extra)
+    return c
+
+
+def test_body_diameter_defaults_to_cutout_diameter():
+    plain = _round("plain", 50, 50, 22.5)
+    assert v.body_bbox(plain) == v.cutout_bbox(plain)
+    assert v.body_bbox(plain) == (38.75, 38.75, 61.25, 61.25)
+
+
+def test_body_diameter_overrides_the_cutout_envelope():
+    big = _round("big", 50, 50, 22.5, body_diameter=40)
+    assert v.body_bbox(big) == (30.0, 30.0, 70.0, 70.0)
+    assert v.cutout_bbox(big) == (38.75, 38.75, 61.25, 61.25)  # cutout untouched
+
+
+def test_rect_control_body_falls_back_to_the_cutout_box(spec):
+    dsi = _find(spec, "dsi_screen")
+    assert v.body_bbox(dsi) == v.cutout_bbox(dsi)
+
+
+def test_body_to_body_overlap_is_an_error():
+    # Cutouts are 60 mm apart (no web violation); the Ø76 bodies collide.
+    errors = v.validate_bodies(_synthetic(
+        _round("wheel_a", 100, 150, 50, body_diameter=76),
+        _round("wheel_b", 160, 150, 50, body_diameter=76),
+    ))
+    assert any(
+        "bodies" in e and "wheel_a" in e and "wheel_b" in e and "16.00 mm in x" in e
+        for e in errors
+    ), errors
+
+
+def test_body_overhanging_another_controls_cutout_is_an_error():
+    errors = v.validate_bodies(_synthetic(
+        _round("wheel", 100, 150, 50, body_diameter=76),
+        _round("btn", 145, 150, 22.5),
+    ))
+    assert any(
+        "body 'wheel' overhangs the cutout of 'btn'" in e for e in errors
+    ), errors
+
+
+def test_body_crossing_the_panel_outline_is_an_error():
+    # Ø50 cutout is fully inside; the Ø76 body hangs off the right edge.
+    errors = v.validate_bodies(_synthetic(
+        _round("wheel", 310, 150, 50, body_diameter=76), width=340, height=290,
+    ))
+    assert any(
+        "body envelope crosses the panel outline" in e and "wheel" in e
+        and "8.00 mm" in e for e in errors
+    ), errors
+
+
+def test_body_intruding_on_another_controls_label_zone_is_an_error():
+    errors = v.validate_bodies(_synthetic(
+        _round("wheel", 100, 150, 50, body_diameter=76),
+        _round("btn", 100, 60, 22.5,
+               label_zone={"x": 90, "y": 105, "w": 30, "h": 10}),
+    ))
+    assert any(
+        # wheel body spans y 112..188; the zone ends at y=115 → 3 mm intrusion
+        "body 'wheel' intrudes on the label_zone of 'btn'" in e and "3.00 mm in y" in e
+        for e in errors
+    ), errors
+
+
+def test_a_control_body_may_sit_in_its_own_label_zone():
+    # Knob graduations are printed under the knob skirt; self must be exempt.
+    errors = v.validate_bodies(_synthetic(
+        _round("knob", 100, 150, 10, body_diameter=30,
+               label_zone={"x": 80, "y": 130, "w": 40, "h": 40}),
+    ))
+    assert errors == [], errors
+
+
+def test_bodies_closer_than_min_web_but_not_touching_is_not_an_error():
+    """min_web is a MATERIAL rule for holes; it must not be applied to bodies.
+
+    Two Ø30 knob bodies with a 2 mm air gap — well under the 6 mm min_web —
+    are perfectly legal, while their Ø10 cutouts remain a comfortable 22 mm
+    apart and so satisfy the web rule.
+    """
+    spec = _synthetic(
+        _round("knob_a", 100, 150, 10, body_diameter=30),
+        _round("knob_b", 132, 150, 10, body_diameter=30),
+    )
+    assert v.bbox_gap(v.body_bbox(spec["controls"][0]),
+                      v.body_bbox(spec["controls"][1])) == pytest.approx(2.0)
+    assert 2.0 < spec["panel"]["min_web"]
+    assert v.validate_geometry(spec) == []
+
+
+def test_bodies_exactly_touching_is_not_an_error():
+    assert v.validate_bodies(_synthetic(
+        _round("a", 100, 150, 10, body_diameter=30),
+        _round("b", 130, 150, 10, body_diameter=30),
+    )) == []
+
+
+def test_body_smaller_than_its_own_cutout_is_an_error():
+    errors = v.validate_bodies(_synthetic(
+        _round("bad", 100, 150, 22.5, body_diameter=10),
+    ))
+    assert any(
+        "body_diameter" in e and "bad" in e and "smaller than its cutout" in e
+        for e in errors
+    ), errors
+
+
+def test_body_rules_are_aggregated_not_raised_early():
+    """The validator's contract is that ALL failures surface in one run."""
+    errors = v.validate_bodies(_synthetic(
+        _round("wheel", 330, 150, 50, body_diameter=76),   # off the right edge
+        _round("btn", 300, 150, 22.5,                      # body-to-cutout
+               label_zone={"x": 295, "y": 190, "w": 20, "h": 8}),
+        _round("knob", 310, 200, 10, body_diameter=30),    # body-to-body + label
+    ))
+    kinds = {
+        "outline": any("crosses the panel outline" in e for e in errors),
+        "body_body": any("bodies" in e for e in errors),
+        "body_cutout": any("overhangs the cutout" in e for e in errors),
+        "label": any("intrudes on the label_zone" in e for e in errors),
+    }
+    assert all(kinds.values()), (kinds, errors)
+
+
+# ---------------------------------------------------------------------------
+# body_diameter / label_zone as shipped
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "cid,expected",
+    [("mpg", 76), ("estop", 40), ("feed_override", 30), ("axis_select", 30),
+     ("step_select", 30), ("spindle_ovr", 24), ("enable", 24)],
+)
+def test_shipped_body_diameters(spec, cid, expected):
+    assert _find(spec, cid)["body_diameter"] == expected
+
+
+@pytest.mark.parametrize(
+    "cid", ["start", "hold", "reset", "spindle", "dust", "led_pwr", "led_link",
+            "led_homed", "led_alarm", "led_probe"],
+)
+def test_flush_controls_omit_body_diameter(spec, cid):
+    """Ø22 buttons and Ø8 LED bezels are flush; they must rely on the default."""
+    c = _find(spec, cid)
+    assert "body_diameter" not in c
+    assert v.body_bbox(c) == v.cutout_bbox(c)
+
+
+def test_every_body_is_at_least_its_cutout(spec):
+    for c in spec["controls"]:
+        if c["cutout"]["kind"] == "round":
+            assert c.get("body_diameter", c["cutout"]["diameter"]) >= c["cutout"]["diameter"]
+
+
+def test_reset_label_zone_matches_the_mockup_baselines(spec):
+    """RESET's zone is the one the MPG was covering — pin its derivation.
+
+    lbl baseline y=146 @ 3.4 px  → top    = 146 − 0.80*3.4 = 143.28 → 143.2
+    sub baseline y=150.5 @ 2.6 px → bottom = 150.5 + 0.20*2.6 = 151.02 → 151.1
+    """
+    z = _find(spec, "reset")["label_zone"]
+    assert (z["x"], z["y"], z["w"], z["h"]) == (273.7, 143.2, 32.6, 7.9)
+    assert z["y"] + z["h"] == pytest.approx(151.1)
+    # The corrected wheel clears it: body top = 192 − 38 = 154.
+    assert v.body_bbox(_find(spec, "mpg"))[1] == 154.0
+
+
+def test_controls_without_a_label_zone_are_documented(spec):
+    """Only estop (legend on its own plate) and dsi_screen (no legend) lack one."""
+    missing = {c["id"] for c in spec["controls"] if "label_zone" not in c}
+    assert missing == {"estop", "dsi_screen"}
+
+
+def test_label_zones_lie_within_the_panel(spec):
+    w, h = spec["panel"]["width"], spec["panel"]["height"]
+    for c in spec["controls"]:
+        box = v.label_zone_bbox(c)
+        if box is None:
+            continue
+        x0, y0, x1, y1 = box
+        assert 0 <= x0 and 0 <= y0 and x1 <= w and y1 <= h, c["id"]
+
+
+def test_label_zone_bbox_returns_none_when_absent():
+    assert v.label_zone_bbox(_round("x", 10, 10, 8)) is None
+
+
+def test_schema_accepts_body_diameter_and_label_zone(spec, schema):
+    assert v.validate_schema(spec, schema) == []
+
+
+def test_schema_rejects_body_diameter_on_a_rect_cutout(spec, schema):
+    _find(spec, "dsi_screen")["body_diameter"] = 200
+    assert v.validate_schema(spec, schema) != []
+
+
+def test_schema_rejects_a_malformed_label_zone(spec, schema):
+    _find(spec, "reset")["label_zone"] = {"x": 1, "y": 2, "w": 3}  # missing h
+    assert v.validate_schema(spec, schema) != []

@@ -1,0 +1,8 @@
+# Isolated Python toolchain for the panel spec — never commit the venv or caches.
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+dist/

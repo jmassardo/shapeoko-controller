@@ -11,6 +11,11 @@ Status: planning.
 The locked architecture decisions are recorded in
 [`docs/architecture.md`](docs/architecture.md).
 
+## Changelog
+
+Release history is tracked in [`CHANGELOG.md`](CHANGELOG.md), following the
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) convention.
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE).

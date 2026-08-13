@@ -1,0 +1,37 @@
+[project]
+name = "shapeoko-hardware"
+version = "0.1.0"
+description = "Panel spec schema validation for the Shapeoko controller (isolated hardware toolchain)."
+requires-python = ">=3.11"
+# Pinned runtime dependencies for the panel-spec validator. This toolchain is
+# deliberately ISOLATED from the Node/TypeScript workspaces and PlatformIO — it
+# lives entirely under hardware/ and is not a member of any Node workspace.
+dependencies = [
+    "pyyaml==6.0.2",
+    "jsonschema==4.23.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.4",
+]
+
+[project.scripts]
+validate-panel-spec = "validate_panel_spec:main"
+
+[tool.pytest.ini_options]
+# Make hardware/tools importable so tests can import the validator directly,
+# and only discover the hardware test suite.
+pythonpath = ["tools"]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["validate_panel_spec"]
+
+[tool.setuptools.package-dir]
+"" = "tools"

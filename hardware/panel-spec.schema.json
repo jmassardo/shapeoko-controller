@@ -1,0 +1,157 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/jmassardo/shapeoko-controller/hardware/panel-spec.schema.json",
+  "title": "Shapeoko panel specification",
+  "description": "Machine-readable source of truth for the physical operator panel. All lengths are millimetres.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["panel", "controls"],
+  "properties": {
+    "panel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["units", "width", "height", "corner_radius", "min_web", "mounting_holes"],
+      "properties": {
+        "units": { "const": "mm" },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "height": { "type": "number", "exclusiveMinimum": 0 },
+        "corner_radius": { "type": "number", "minimum": 0 },
+        "thickness": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "min_web": { "type": "number", "minimum": 0 },
+        "mounting_holes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "x", "y", "diameter"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "diameter": { "type": "number", "exclusiveMinimum": 0 },
+              "thread": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "controls": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/control" }
+    }
+  },
+  "definitions": {
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "type", "x", "y", "safety_critical", "cutout", "notes"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9_]+$" },
+        "label": { "type": "string", "minLength": 1 },
+        "sub_label": { "type": "string", "minLength": 1 },
+        "type": {
+          "type": "string",
+          "enum": [
+            "estop_mushroom",
+            "illuminated_button_22",
+            "deadman_22",
+            "potentiometer",
+            "rotary_selector",
+            "mpg_handwheel",
+            "led_indicator",
+            "dsi_screen",
+            "usb_passthrough",
+            "lan_passthrough"
+          ]
+        },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "safety_critical": { "type": "boolean" },
+        "body_diameter": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Diameter of the PHYSICAL component body in mm, for round-cutout controls only. This is the envelope that sits proud of the panel (mushroom head, knob skirt, handwheel rim), which is frequently LARGER than the cutout it mounts through. Optional: when absent it defaults to cutout.diameter, which is correct for flush or near-flush components. It must never be smaller than cutout.diameter — a body cannot be smaller than the hole it mounts in."
+        },
+        "cutout": { "$ref": "#/definitions/cutout" },
+        "plate": { "$ref": "#/definitions/plate" },
+        "label_zone": { "$ref": "#/definitions/label_zone" },
+        "notes": { "type": "string" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "estop_mushroom" } } },
+          "then": { "required": ["plate"] }
+        },
+        {
+          "if": {
+            "properties": { "cutout": { "properties": { "kind": { "const": "rect" } } } },
+            "required": ["cutout"]
+          },
+          "then": { "not": { "required": ["body_diameter"] } }
+        }
+      ]
+    },
+    "cutout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["round", "rect"] },
+        "diameter": { "type": "number", "exclusiveMinimum": 0 },
+        "anti_rotation_flat": { "type": "number", "exclusiveMinimum": 0 },
+        "w": { "type": "number", "exclusiveMinimum": 0 },
+        "h": { "type": "number", "exclusiveMinimum": 0 },
+        "corner_r": { "type": "number", "minimum": 0 },
+        "module_envelope": { "$ref": "#/definitions/wh" },
+        "active_area": { "$ref": "#/definitions/wh" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "round" } } },
+          "then": { "required": ["diameter"] }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "rect" } } },
+          "then": { "required": ["w", "h"] }
+        }
+      ]
+    },
+    "wh": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["w", "h"],
+      "properties": {
+        "w": { "type": "number", "exclusiveMinimum": 0 },
+        "h": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "label_zone": {
+      "type": "object",
+      "description": "Rectangular area of panel reserved for this control's printed legend, in panel coordinates with a TOP-LEFT origin (x, y, w, h) — the same convention as the E-stop `plate`, because a legend is an area, not a control centre. No OTHER control's body envelope may intrude into this rectangle.",
+      "additionalProperties": false,
+      "required": ["x", "y", "w", "h"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "w": { "type": "number", "exclusiveMinimum": 0 },
+        "h": { "type": "number", "exclusiveMinimum": 0 },
+        "derived_from": { "type": "string" }
+      }
+    },
+    "plate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "w", "h"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "w": { "type": "number", "exclusiveMinimum": 0 },
+        "h": { "type": "number", "exclusiveMinimum": 0 },
+        "corner_r": { "type": "number", "minimum": 0 },
+        "colour": { "type": "string" }
+      }
+    }
+  }
+}

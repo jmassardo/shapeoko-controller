@@ -1,0 +1,502 @@
+# ---------------------------------------------------------------------------
+# Shapeoko Pro XXL — canonical machine-readable panel specification
+# ---------------------------------------------------------------------------
+# This file is the SINGLE SOURCE OF TRUTH for the physical operator panel.
+# The mockup drawing (docs/hardware/panel-mockup.svg, issue #117) and the CAD
+# hole positions (issue #124) are BOTH generated from this file so they cannot
+# drift apart. Do not hand-edit dimensions into the SVG or the CAD — edit here.
+#
+# Units: every length is in millimetres (mm). The SVG user unit is also 1 mm,
+# so coordinates transcribe 1:1 from the mockup.
+#
+# Coordinate convention:
+#   * Every control's x / y is the CENTRE of the control, in panel coordinates
+#     with the origin at the panel's top-left corner, +x right, +y down (same
+#     as the SVG). Round controls in the mockup are drawn as <circle cx cy>,
+#     so their centres transcribe directly. Rectangular controls (the DSI
+#     screen, USB and LAN) are drawn as <rect x y w h> using a TOP-LEFT origin;
+#     their centres here are that origin plus half the drawn size (see the
+#     per-control notes). This is the one transcription that is not literal.
+#   * The E-stop `plate` sub-object uses a TOP-LEFT origin (x, y, w, h), exactly
+#     as the yellow-plate <rect> is drawn, because a plate is an area, not a
+#     control centre. A control's optional `label_zone` uses the SAME top-left
+#     convention, for the same reason.
+#
+# Cutout vs body: `cutout` is the HOLE machined in the faceplate. `body_diameter`
+# is the PHYSICAL COMPONENT that sits proud of it — the mushroom head, the knob
+# skirt, the handwheel rim. For many components the body is substantially larger
+# than its hole, so validating cutouts alone misses real interference (this is
+# exactly what let the MPG creep on top of RESET's sub-label; see #116 review).
+# `body_diameter` is optional and defaults to the cutout diameter, which is
+# correct for flush or near-flush parts such as the Ø22 buttons and Ø8 LEDs.
+# All body diameters below are read off docs/hardware/panel-mockup.svg (the
+# filled component circle, NOT the thin unfilled scale ring around a knob) and
+# cross-checked against the drawing's own dimension callouts.
+#
+# `label_zone` is the area of panel reserved for a control's printed legend. No
+# OTHER control's body may intrude on it. The zones below are derived from the
+# <text class="lbl"> and <text class="sub"> elements of the mockup together with
+# the font sizes in its <style> block, using:
+#     top    = first baseline - 0.80 * font_size   (Helvetica cap/ascender)
+#     bottom = last  baseline + 0.20 * font_size   (Helvetica descender)
+#     width  = n_chars * (0.52 * font_size + letter_spacing), centred on the
+#              text-anchor="middle" x, then rounded OUTWARD to 0.1 mm
+# The vertical extents are exact (baselines are literal in the SVG); the widths
+# are an estimate from an average Helvetica advance of 0.52 em, rounded outward
+# so the zone errs large. Two controls carry no zone: `estop` (its legend is
+# drawn with bespoke inline styles on its own yellow plate, which already
+# reserves that area) and `dsi_screen` (it has no printed legend at all).
+#
+# Safety: the ENABLE<->MPG and RESET<->E-stop distances encoded here are load-
+# bearing. The validator (hardware/tools/validate_panel_spec.py) fails the build
+# if an edit brings them below the limits fixed in #115. Do not move ENABLE,
+# MPG, RESET or the E-stop without re-reading #115.
+# ---------------------------------------------------------------------------
+
+panel:
+  units: mm
+  width: 340
+  height: 290
+  corner_radius: 7
+  thickness: null            # material / thickness selection is #125 — not decided here
+  # Minimum web (material left between two adjacent control cutouts). Applies to
+  # control cutouts only, not the corner mounting holes.
+  min_web: 6
+  mounting_holes:
+    # Four M4 corner fixings. Coordinates are hole centres.
+    - id: mh_tl
+      x: 8
+      y: 8
+      diameter: 4.5           # M4 clearance
+      thread: M4
+    - id: mh_tr
+      x: 332
+      y: 8
+      diameter: 4.5
+      thread: M4
+    - id: mh_bl
+      x: 8
+      y: 282
+      diameter: 4.5
+      thread: M4
+    - id: mh_br
+      x: 332
+      y: 282
+      diameter: 4.5
+      thread: M4
+
+controls:
+  # ---- EMERGENCY STOP -----------------------------------------------------
+  - id: estop
+    label: EMERGENCY STOP
+    sub_label: PULL TO RELEASE
+    type: estop_mushroom
+    x: 290
+    y: 47
+    safety_critical: true
+    body_diameter: 40         # Ø40 red mushroom head; <circle r="20"> in the mockup
+    cutout:
+      kind: round
+      diameter: 22.5          # Ø22 panel mount bore (NOT the Ø40 mushroom head)
+      anti_rotation_flat: 10.2 # distance from bore centre to the anti-rotation flat chord
+    plate:
+      # 76x76 yellow legend plate, drawn as <rect x=252 y=12 w=76 h=76>.
+      # Top-left origin, not a centre.
+      x: 252
+      y: 12
+      w: 76
+      h: 76
+      corner_r: 4
+      colour: safety_yellow
+    notes: >-
+      Software only observes the E-stop; it never commands it (#115). The Ø40
+      red mushroom head overhangs the Ø22 bore. RESET must stay outside this
+      plate and clear of the mushroom centre.
+
+  # ---- CYCLE BUTTONS (Ø22 illuminated momentary) --------------------------
+  - id: start
+    label: START
+    sub_label: cycle start / resume
+    type: illuminated_button_22
+    x: 206
+    y: 128
+    safety_critical: false
+    cutout:
+      kind: round
+      diameter: 22.5
+      anti_rotation_flat: 10.2
+    label_zone:
+      # lbl "START" y=146 (3.4) + sub "cycle start / resume" y=150.5 (2.6)
+      x: 192.4
+      y: 143.2
+      w: 27.2
+      h: 7.9
+    notes: Green illuminated momentary; lit = cycle running.
+
+  - id: hold
+    label: HOLD
+    sub_label: feed hold
+    type: illuminated_button_22
+    x: 248
+    y: 128
+    safety_critical: false
+    cutout:
+      kind: round
+      diameter: 22.5
+      anti_rotation_flat: 10.2
+    label_zone:
+      # lbl "HOLD" y=146 (3.4) + sub "feed hold" y=150.5 (2.6)
+      x: 241.9
+      y: 143.2
+      w: 12.2
+      h: 7.9
+    notes: Amber illuminated momentary; feed hold.
+
+  - id: reset
+    label: RESET
+    sub_label: soft reset / clear alarm
+    type: illuminated_button_22
+    x: 290
+    y: 128
+    safety_critical: true
+    cutout:
+      kind: round
+      diameter: 22.5
+      anti_rotation_flat: 10.2
+    label_zone:
+      # lbl "RESET" y=146 (3.4) + sub "soft reset / clear alarm" y=150.5 (2.6)
+      x: 273.7
+      y: 143.2
+      w: 32.6
+      h: 7.9
+    notes: >-
+      Soft reset / clear alarm. Deliberately placed clear of the E-stop plate
+      and >=75 mm from the mushroom centre so it cannot be hit in place of the
+      E-stop (#115).
+
+  # ---- ENABLE (deadman) ---------------------------------------------------
+  - id: enable
+    label: ENABLE
+    sub_label: hold to jog
+    type: deadman_22
+    x: 30
+    y: 182
+    safety_critical: true
+    body_diameter: 24         # Ø24 guard bezel; <circle r="12"> in the mockup
+    cutout:
+      kind: round
+      diameter: 22.5
+      anti_rotation_flat: 10.2
+    label_zone:
+      # lbl "ENABLE" y=200 (3.4) + sub "hold to jog" y=204.5 (2.6)
+      x: 22.5
+      y: 197.2
+      w: 15.0
+      h: 7.9
+    notes: >-
+      Hold-to-jog deadman. Kept >=250 mm from the MPG handwheel (#115) so it
+      cannot be jammed on while the operator's other hand is on the wheel.
+
+  # ---- MACHINE BUTTONS (Ø22 illuminated) ----------------------------------
+  - id: spindle
+    label: SPINDLE
+    sub_label: "M3/M5 · lit = running"
+    type: illuminated_button_22
+    x: 40
+    y: 260
+    safety_critical: false
+    cutout:
+      kind: round
+      diameter: 22.5
+      anti_rotation_flat: 10.2
+    label_zone:
+      # lbl "SPINDLE" y=278 (3.4) + sub y=282.5 (2.6)
+      x: 25.8
+      y: 275.2
+      w: 28.4
+      h: 7.9
+    notes: Carbide VFD spindle via GRBL M3/M5 + S-word; lamp = running.
+
+  - id: dust
+    label: DUST
+    # Commanded by a cloned 433.92 MHz RF remote from the ESP32 via CC1101
+    # (#63, #137) — an RF transmission, not a switched output. Lamp = confirmed
+    # running from current-sense feedback (#138), not merely commanded state.
+    sub_label: "RF · auto · lit = confirmed"
+    type: illuminated_button_22
+    x: 105
+    y: 260
+    safety_critical: false
+    cutout:
+      kind: round
+      diameter: 22.5
+      anti_rotation_flat: 10.2
+    label_zone:
+      # lbl "DUST" y=278 (3.4) + sub y=282.5 (2.6)
+      x: 86.7
+      y: 275.2
+      w: 36.6
+      h: 7.9
+    notes: >-
+      Dust collector commanded over RF (cloned Fosmon remote, #63/#137). Lamp
+      reflects current-sense confirmation of running (#138). No switched
+      output device exists anywhere in the design.
+
+  # ---- STATUS LEDS --------------------------------------------------------
+  - id: led_pwr
+    label: PWR
+    type: led_indicator
+    x: 26
+    y: 126
+    safety_critical: false
+    cutout:
+      kind: round
+      diameter: 8.0
+    label_zone:
+      # sub "PWR" y=134 (2.6)
+      x: 23.9
+      y: 131.9
+      w: 4.2
+      h: 2.7
+    notes: Panel LED holder, Ø8 bezel.
+
+  - id: led_link
+    label: LINK
+    type: led_indicator
+    x: 60
+    y: 126
+    safety_critical: false
+    cutout:
+      kind: round
+      diameter: 8.0
+    label_zone:
+      # sub "LINK" y=134 (2.6)
+      x: 57.2
+      y: 131.9
+      w: 5.6
+      h: 2.7
+    notes: Panel LED holder, Ø8 bezel.
+
+  - id: led_homed
+    label: HOMED
+    type: led_indicator
+    x: 94
+    y: 126
+    safety_critical: false
+    cutout:
+      kind: round
+      diameter: 8.0
+    label_zone:
+      # sub "HOMED" y=134 (2.6)
+      x: 90.6
+      y: 131.9
+      w: 6.8
+      h: 2.7
+    notes: Panel LED holder, Ø8 bezel.
+
+  - id: led_alarm
+    label: ALARM
+    type: led_indicator
+    x: 128
+    y: 126
+    safety_critical: false
+    cutout:
+      kind: round
+      diameter: 8.0
+    label_zone:
+      # sub "ALARM" y=134 (2.6)
+      x: 124.6
+      y: 131.9
+      w: 6.8
+      h: 2.7
+    notes: Panel LED holder, Ø8 bezel.
+
+  - id: led_probe
+    label: PROBE
+    type: led_indicator
+    x: 162
+    y: 126
+    safety_critical: false
+    cutout:
+      kind: round
+      diameter: 8.0
+    label_zone:
+      # sub "PROBE" y=134 (2.6)
+      x: 158.6
+      y: 131.9
+      w: 6.8
+      h: 2.7
+    notes: Panel LED holder, Ø8 bezel.
+
+  # ---- ROTARY CONTROLS (pendant row) --------------------------------------
+  - id: feed_override
+    label: FEED OVERRIDE %
+    type: potentiometer
+    x: 93
+    y: 182
+    safety_critical: false
+    body_diameter: 30         # Ø30 knob; <circle r="15" fill="url(#knob)"> in the mockup
+    cutout:
+      kind: round
+      diameter: 10.0          # bushing hole (the Ø30 knob body is body_diameter)
+    label_zone:
+      # lbl "FEED OVERRIDE %" y=212 (3.4) + dial graduations 0/50/100/150/200 (2.6)
+      x: 71.3
+      y: 157.9
+      w: 45.8
+      h: 54.8
+    notes: Feed override pot, 0-200%.
+
+  - id: axis_select
+    label: AXIS
+    type: rotary_selector
+    x: 152
+    y: 182
+    safety_critical: false
+    body_diameter: 30         # Ø30 knob; <circle r="15" fill="url(#knob)"> in the mockup
+    cutout:
+      kind: round
+      diameter: 12.0           # rotary selector bushing hole
+    label_zone:
+      # lbl "AXIS" y=212 (3.4) + graduations OFF/X/Y/Z (2.6)
+      x: 128.9
+      y: 156.9
+      w: 38.8
+      h: 55.8
+    notes: Axis selector OFF / X / Y / Z.
+
+  - id: step_select
+    label: STEP
+    type: rotary_selector
+    x: 211
+    y: 182
+    safety_critical: false
+    body_diameter: 30         # Ø30 knob; <circle r="15" fill="url(#knob)"> in the mockup
+    cutout:
+      kind: round
+      diameter: 12.0
+    label_zone:
+      # lbl "STEP" y=212 (3.4) + graduations x1/x10/x100 + "0.001 / 0.01 / 0.1 mm" y=203 (2.6)
+      x: 190.6
+      y: 156.9
+      w: 43.2
+      h: 55.8
+    notes: Step multiplier x1 / x10 / x100 (0.001 / 0.01 / 0.1 mm).
+
+  - id: spindle_ovr
+    label: SPINDLE OVR %
+    type: potentiometer
+    x: 180
+    y: 260
+    safety_critical: false
+    body_diameter: 24         # Ø24 knob; <circle r="12" fill="url(#knob)"> in the mockup
+    cutout:
+      kind: round
+      diameter: 10.0
+    label_zone:
+      # lbl "SPINDLE OVR %" y=282 (3.4) + graduations 50/100/150 (2.6)
+      x: 161.6
+      y: 238.9
+      w: 38.5
+      h: 43.8
+    notes: Spindle RPM trim, 50-150%.
+
+  # ---- MPG HANDWHEEL ------------------------------------------------------
+  - id: mpg
+    label: MPG HANDWHEEL
+    type: mpg_handwheel
+    # RENDERED centre, not the pre-transform drawing coordinate. In the mockup
+    # the whole MPG group is wrapped in
+    #     transform="translate(285,192) scale(0.94) translate(-283,-187)"
+    # which maps the drawn point (283,187) to a rendered centre of (285,192).
+    # That offset was applied deliberately during design to stop the Ø76 wheel
+    # body from covering RESET's sub-label; transcribing the pre-transform
+    # (283,187) reintroduced the collision it fixed (#116 review). The scale
+    # (0.94) was a cosmetic shrink of the DRAWING only — the real handwheel is
+    # Ø76, and this file records physical truth, so body_diameter stays 76.
+    x: 285
+    y: 192
+    safety_critical: false
+    body_diameter: 76         # Ø76 wheel rim; overhangs the Ø50 boss by 13 mm all round
+    cutout:
+      kind: round
+      diameter: 50.0          # mounting boss recess (NOT the Ø76 wheel body)
+    label_zone:
+      # <text class="lbl" x="285" y="233">MPG HANDWHEEL</text>, font-size 3.4
+      x: 271.2
+      y: 230.2
+      w: 27.6
+      h: 3.5
+    notes: >-
+      Ø76 100-PPR quadrature handwheel. Cutout is the mounting boss; the Ø76
+      wheel body overhangs the panel by 13 mm on every side, so it is the body
+      envelope — not the cutout — that governs clearance to RESET and to
+      RESET's legend. Kept >=250 mm from ENABLE (#115): the centre distance at
+      (285,192) is sqrt(255^2 + 10^2) = 255.20 mm.
+
+  # ---- DSI TOUCHSCREEN ----------------------------------------------------
+  - id: dsi_screen
+    label: 7" DSI TOUCH
+    sub_label: "1024x600 · 154x86 active"
+    type: dsi_screen
+    # Drawn as <rect x=12 y=12> module. Centre = origin + half the 165x100
+    # module envelope = (12 + 82.5, 12 + 50) = (94.5, 62).
+    x: 94.5
+    y: 62
+    safety_critical: false
+    cutout:
+      kind: rect
+      # The faceplate is CUT to the visible aperture and CLEARED for the module.
+      w: 156                   # visible aperture width (active + ~1 mm mask margin)
+      h: 88                    # visible aperture height
+      corner_r: 3
+      module_envelope:         # the module body the faceplate must clear behind
+        w: 165
+        h: 100
+      active_area:             # the illuminated LCD area
+        w: 154
+        h: 86
+    notes: >-
+      7" DSI panel, 1024x600. Cut the faceplate to the 156x88 aperture; clear
+      the 165x100 module envelope behind. Active area is 154x86.
+
+  # ---- SERVICE PORTS ------------------------------------------------------
+  - id: usb
+    label: USB
+    type: usb_passthrough
+    # Drawn as <rect x=238 y=252 w=18 h=7>. Centre = (238+9, 252+3.5) = (247, 255.5).
+    x: 247
+    y: 255.5
+    safety_critical: false
+    cutout:
+      kind: rect
+      w: 18
+      h: 7
+      corner_r: 1
+    label_zone:
+      # sub "USB" y=266 (2.6)
+      x: 244.9
+      y: 263.9
+      w: 4.2
+      h: 2.7
+    notes: Panel-mount USB-A pass-through coupler.
+
+  - id: lan
+    label: LAN
+    type: lan_passthrough
+    # Drawn as <rect x=278 y=251 w=20 h=9>. Centre = (278+10, 251+4.5) = (288, 255.5).
+    x: 288
+    y: 255.5
+    safety_critical: false
+    cutout:
+      kind: rect
+      w: 20
+      h: 9
+      corner_r: 1
+    label_zone:
+      # sub "LAN" y=266 (2.6)
+      x: 285.9
+      y: 263.9
+      w: 4.2
+      h: 2.7
+    notes: Panel-mount RJ45 LAN / service pass-through coupler.

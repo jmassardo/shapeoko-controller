@@ -8,9 +8,11 @@ describe('@shapeoko/protocol barrel', () => {
     expect(PROTOCOL_CONTRACT_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
-  it('re-exports the machine, settings, panel, and api surfaces', () => {
+  it('re-exports the machine, coordinates, settings, panel, and api surfaces', () => {
     // One representative runtime symbol from each module proves the barrel wiring.
     expect(protocol.MACHINE_STATES).toContain('Idle');
+    expect(protocol.WCS_IDS).toContain('G54');
+    expect(protocol.wcsIdToPWord('G59')).toBe(6);
     expect(protocol.GRBL_SETTING.PROBE_INVERT).toBe(6);
     expect(protocol.AXIS_SELECTORS).toContain('OFF');
     expect(protocol.REALTIME_COMMAND.JOG_CANCEL).toBe(0x85);

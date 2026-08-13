@@ -6,6 +6,11 @@ A dedicated touchscreen + physical-button controller for the Shapeoko Pro XXL, r
 
 Status: planning.
 
+## Architecture
+
+The locked architecture decisions are recorded in
+[`docs/architecture.md`](docs/architecture.md).
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE).

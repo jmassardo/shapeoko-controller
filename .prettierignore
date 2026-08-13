@@ -1,0 +1,30 @@
+# Prettier scope control.
+#
+# format:check runs `prettier --check .` so newly added files (e.g. a root
+# CHANGELOG.md) are covered automatically. This file removes only the trees
+# Prettier must NOT own.
+
+# Dependencies and build output
+node_modules/
+**/dist/
+**/coverage/
+
+# Firmware is a separate C++/PlatformIO toolchain (.cpp/.h/.ini) and is
+# intentionally kept out of Prettier scope.
+firmware/
+
+# Isolated Python hardware toolchain and its venv/build artifacts.
+hardware/
+
+# Shell-based deployment tooling.
+deploy/
+
+# docs/ prose is not currently Prettier-formatted and reformatting it is out of
+# scope for this issue (issue #14). Excluded here so widening format:check to
+# "." does not fail on pre-existing docs drift; a dedicated docs-formatting pass
+# is left as a follow-up. Root-level Markdown (README.md, THIRD-PARTY-NOTICES.md,
+# and a future CHANGELOG.md) is intentionally NOT excluded and remains checked.
+docs/
+
+# Generated lockfile.
+package-lock.json

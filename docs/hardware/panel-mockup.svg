@@ -114,7 +114,7 @@
   <!-- control: dust (illuminated_button_22) -->
   <g>
     <circle cx="105" cy="260" r="11" fill="url(#btnW)" stroke="#5e666d" stroke-width="0.9"/>
-    <text class="lbl" x="105" y="278">DUSZ</text>
+    <text class="lbl" x="105" y="278">DUST</text>
     <text class="sub" x="105" y="282.5">RF · auto · lit = confirmed</text>
   </g>
 

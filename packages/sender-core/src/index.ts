@@ -4,10 +4,13 @@
  * This package now owns the typed serial transport layer: a strongly-typed
  * contract ({@link SerialTransport}) with a real `serialport`-backed
  * implementation ({@link SerialPortTransport}) and a deterministic in-memory
- * double ({@link FakeTransport}) for tests. Higher-level concerns — port
- * discovery, GRBL line parsing, real-time prioritization, and G-code streaming
- * flow control — are layered on top of this transport in later issues. This is
- * explicitly NOT CNCjs.
+ * double ({@link FakeTransport}) for tests. Layered on top of the transport, the
+ * GRBL line codec ({@link GrblLineCodec}) has now landed: it frames the raw byte
+ * stream into typed {@link GrblLineEvent}s (`ok`, `error`, `ALARM`, bracket
+ * messages, settings, welcome, and raw status reports). The remaining
+ * higher-level concerns — port discovery, status-report field parsing,
+ * real-time prioritization, and G-code streaming flow control — are layered on
+ * in later issues. This is explicitly NOT CNCjs.
  */
 
 export type {
@@ -21,6 +24,22 @@ export type {
 export { SerialTransportError } from './serial/types.js';
 export { SerialPortTransport, defaultSerialPortFactory } from './serial/transport.js';
 export { FakeTransport, type ExpectedWrite } from './serial/fakeTransport.js';
+
+export { GrblLineCodec, GRBL_ALARM_DESCRIPTIONS, describeAlarm } from './grbl/lineCodec.js';
+export type {
+  GrblLineEvent,
+  GrblOkEvent,
+  GrblErrorEvent,
+  GrblAlarmEvent,
+  GrblMessageEvent,
+  GrblProbeResultEvent,
+  GrblModalStateEvent,
+  GrblOffsetEvent,
+  GrblSettingEvent,
+  GrblWelcomeEvent,
+  GrblStatusReportRawEvent,
+  GrblUnknownEvent,
+} from './grbl/lineCodec.js';
 
 /** Placeholder readiness flag so the package exposes a real, importable symbol. */
 export const SENDER_CORE_READY = false;

@@ -157,7 +157,7 @@ controls:
     sub_label: soft reset / clear alarm
     type: illuminated_button_22
     x: 290
-    y: 110
+    y: 128
     safety_critical: true
     cutout:
       kind: round

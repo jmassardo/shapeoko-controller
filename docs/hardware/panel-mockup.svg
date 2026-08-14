@@ -133,7 +133,7 @@
     <circle cx="290" cy="47" r="20" fill="url(#estop)" stroke="#6d0d06" stroke-width="1"/>
     <circle cx="290" cy="47" r="13" fill="none" stroke="#7d1109" stroke-width="0.6" opacity="0.7"/>
     <text x="290" y="49" fill="#ffe9e6" font-size="5" font-weight="700" text-anchor="middle">STOP</text>
-    <text x="290" y="80" fill="#4a3d00" font-size="4.6" font-weight="700" text-anchor="middle">EMERGENCY STOP</text>
+    <text x="290" y="80" fill="#4a3d00" font-size="4.6" font-weight="700" text-anchor="middle">EMERGENCY STOZ</text>
     <text x="290" y="85.5" fill="#6a5800" font-size="3" text-anchor="middle">PULL TO RELEASE · CUTS SPINDLE + STEPPERS</text>
   </g>
 

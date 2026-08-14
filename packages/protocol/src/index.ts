@@ -18,9 +18,11 @@
  * fork (issues #16–#20). The ones that touch this type surface — the welcome
  * string and the exact `$G` parser-state field set (#16), the OEM `$`-settings
  * above `$132` (#17), and the probe-pin polarity default (#20) — are each
- * isolated behind a clearly marked seam, as is the ESP32 panel wire encoding (a
- * later firmware issue). Search this package
- * for `UNVERIFIED (#` to find every one. The remaining fork uncertainties (M6
+ * isolated behind a clearly marked seam. Search this package
+ * for `UNVERIFIED (#` to find every one. The ESP32 panel wire encoding, formerly
+ * a seam here, is now closed: its byte envelope is normative in
+ * `firmware/panel/include/frame_types.h` (#54) and mirrored for consumers by the
+ * `PANEL_WIRE_*` constants in `panel.ts` (#55). The remaining fork uncertainties (M6
  * tool-change behaviour, BitZero V1 dimensions) are behavioural and belong to
  * sender-core, not this contract.
  */

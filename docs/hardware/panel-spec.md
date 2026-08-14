@@ -23,6 +23,46 @@ the CAD.** Edit them here and regenerate.
 > No coordinate literal for the panel should be duplicated anywhere outside this
 > file.
 
+## Regenerating the mockup (`docs/hardware/panel-mockup.svg`)
+
+`docs/hardware/panel-mockup.svg` is a **generated artifact** of this spec
+(issue #117). It **must never be hand-edited** — a wording or coordinate change
+is a spec edit here, and the generator applies it. CI enforces this: the
+`hardware` job in `.github/workflows/ci.yml` regenerates the SVG and diffs it
+against the committed copy, so a hand-edited or drifted mockup fails the build.
+
+Regenerate after any spec change (run from `hardware/`, using the same
+environment as the validator):
+
+```bash
+cd hardware
+./.venv/bin/python tools/generate_panel_svg.py     # rewrites docs/hardware/panel-mockup.svg
+```
+
+The generator validates the spec first and **refuses to write any output** when
+the spec is invalid, leaving the committed SVG untouched. It is deterministic:
+regenerating with no spec change yields a byte-identical file (controls sorted by
+`id`, fixed float formatting, no timestamps).
+
+To verify (as CI does) that the committed SVG is a clean regeneration:
+
+```bash
+# Pass a caller-provided scratch directory (never a system temp path); if
+# omitted, the script creates one with `mktemp -d` and removes it on exit.
+PYTHON=./.venv/bin/python tools/check_generated_artifacts.sh "$(mktemp -d)"
+```
+
+`check_generated_artifacts.sh` exits `0` when the committed SVG matches a fresh
+regeneration and non-zero (printing the offending diff) when it does not. There
+is **no committed PNG** — the raster export was removed because it was a stale
+hand-export; render from the SVG on demand if a raster is needed.
+
+> **The DUST sub-label change** (`RF · auto · lit = confirmed`, replacing the old
+> `relay out · auto w/ spindle`) is authored *here*, in the spec, and flows into
+> the SVG through regeneration — never by hand-editing the drawing. The word
+> "relay" must not appear in the spec or the generated SVG.
+
+
 ## Units and coordinates
 
 - **All lengths are millimetres.** `panel.units` is `mm` and the schema pins it.

@@ -94,6 +94,9 @@ bool FrameDecoder::push_byte(std::uint8_t b, DecodedFrame& out) noexcept {
         ++counters_.garbage_bytes;
       } else {
         // Pending 0xAA and this byte are both garbage; resume the SYNC0 hunt.
+        // Both bytes are discarded, hence += 2 (see
+        // test_garbage_before_sync_counted_then_decoded: a lone 0xAA followed by
+        // a non-sync byte contributes 2 to garbage_bytes).
         counters_.garbage_bytes += 2;
         state_ = State::kSync0;
       }

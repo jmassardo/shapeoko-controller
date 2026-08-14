@@ -31,7 +31,7 @@
 //   5+LEN   CRC_HI      1     CRC-16 high byte  (big-endian on the wire)
 //   6+LEN   CRC_LO      1     CRC-16 low  byte
 //
-// Total frame = 6 + LEN bytes. Minimum 6 (empty payload), maximum 70 (LEN=64).
+// Total frame = 7 + LEN bytes. Minimum 7 (empty payload), maximum 71 (LEN=64).
 //
 // SYNC is TWO bytes 0xAA 0x55. One byte would give a 1-in-256 false-lock rate on
 // random garbage; two DISTINCT bytes with maximum bit-transition density

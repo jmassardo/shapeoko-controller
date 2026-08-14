@@ -9,5 +9,11 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc"
+  },
+  "dependencies": {
+    "serialport": "13.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0"
   }
 }

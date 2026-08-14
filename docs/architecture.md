@@ -97,8 +97,9 @@ custom core lets the sender, kiosk UI, and panel firmware share one designed
 protocol surface instead of adapting around a third-party sender's assumptions.
 
 **Consequences:** We own the sender's correctness and maintenance. The stack is
-Node/TypeScript end-to-end on the Pi. Adopting CNCjs (or any drop-in sender)
-later would discard this integration and is treated as non-conformant.
+Node/TypeScript end-to-end on the Pi; the pinned Node runtime version is fixed
+by ADR-013. Adopting CNCjs (or any drop-in sender) later would discard this
+integration and is treated as non-conformant.
 
 ---
 
@@ -307,6 +308,56 @@ authoritative policy documents.
 
 ---
 
+### ADR-013 — Node 26 is the target runtime
+
+**Status:** LOCKED
+
+**Decision:** The single target runtime for the entire project — sender core,
+tooling, CI, and the Raspberry Pi deployment — is **Node 26**. The root
+[`package.json`](../package.json) `engines.node` field pins a **bounded** range,
+`>=26.5.0 <27.0.0`, and that range is the one authoritative version statement
+for the whole repository.
+
+**Rationale:** The choice is driven by the Node.js release schedule. Node 26 has
+been Current since 2026-05-05 and becomes **Active LTS on 2026-10-28**, entering
+maintenance 2027-10-20 and reaching end-of-life 2029-04-30 — the longest
+support runway of any current line. **Why not Node 24:** 24 is currently
+Active LTS (since 2025-10-28) but enters maintenance on 2026-10-20, just eight
+days before 26 becomes Active LTS on 2026-10-28, so adopting 24 would buy
+exactly one LTS cycle of immediate decline. **Why not Node 22:** 22 has been in
+maintenance since 2025-10-21 and receives critical fixes only, reaching
+end-of-life 2027-04-30. Targeting 26 takes the line with the most remaining
+support rather than one already past its peak.
+
+**Consequences:** As of this decision Node 26 is **Current, not yet LTS** (it
+becomes Active LTS on 2026-10-28). Semver-minor releases in a Current line may
+still carry breaking changes; this is an **accepted, time-boxed risk until
+2026-10-28**, when 26 reaches Active LTS and stabilizes.
+
+Three layers must agree on this single target, and each is enforced:
+
+- **Package engines.** The root [`package.json`](../package.json)
+  `engines.node` carries that bounded range, and [`.npmrc`](../.npmrc) sets
+  `engine-strict=true`, so `npm ci` / `npm install` hard-fail on a wrong Node
+  (#14). The floor is bounded on purpose: an unbounded `>=26` is a wish, not a
+  target.
+- **CI matrix.** The CI `node` job matrix is pinned to Node `26.x` on every push
+  and pull request (#14), and `npm run check:engines-matrix`
+  ([`tools/check-engines-matrix.mjs`](../tools/check-engines-matrix.mjs)) fails
+  the build if `engines.node` is unbounded or if the CI matrix and that range
+  drift apart.
+- **Pi deployment runtime.** The Raspberry Pi deployment must run the same Node
+  major; this third layer is tracked by #154.
+
+The runtime target is **single and unfragmented** by design. The defect this
+closed was Node version *drift* across those three layers — an unbounded
+`engines: ">=22"`, a CI matrix specified as Node 22, and actual development on
+Node 26 all disagreeing at once. Re-fragmenting the runtime target — for
+example pinning one workspace to a different Node major than CI and the
+Raspberry Pi — is itself the defect, not an acceptable workaround.
+
+---
+
 ## Panel safety geometry (preserved rationale)
 
 Two physical-placement rules on the operator panel are **load-bearing safety
@@ -373,6 +424,10 @@ how it is justified:
    interrupt-capable GPIO (ADR-005).
 6. **Adopting CNCjs (or another off-the-shelf sender) in place of the custom
    TypeScript sender core.** Rejected (ADR-001).
+7. **Re-fragmenting the Node runtime target — pinning one workspace, CI, or the
+   Raspberry Pi to a different Node major than the others.** Rejected. The
+   runtime is a single bounded target across all three layers; version drift
+   across those layers is the defect this closed, not a workaround (ADR-013).
 
 The **ENABLE/handwheel separation** and **RESET/E-stop separation** safety
 rationale (see [Panel safety geometry](#panel-safety-geometry-preserved-rationale))

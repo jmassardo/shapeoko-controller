@@ -1,11 +1,26 @@
 /**
  * @shapeoko/sender-core — g-code sender core for the Shapeoko controller.
  *
- * This package is intentionally a scaffold only. The real GRBL serial transport
- * (via the `serialport` library), streaming/flow control, and machine state
- * machine are added in later issues. This is explicitly NOT CNCjs. No serial,
- * WebSocket, or GRBL behavior lives here yet.
+ * This package now owns the typed serial transport layer: a strongly-typed
+ * contract ({@link SerialTransport}) with a real `serialport`-backed
+ * implementation ({@link SerialPortTransport}) and a deterministic in-memory
+ * double ({@link FakeTransport}) for tests. Higher-level concerns — port
+ * discovery, GRBL line parsing, real-time prioritization, and G-code streaming
+ * flow control — are layered on top of this transport in later issues. This is
+ * explicitly NOT CNCjs.
  */
+
+export type {
+  SerialTransport,
+  SerialTransportEventMap,
+  SerialErrorKind,
+  SerialPortLike,
+  SerialPortFactory,
+  SerialPortOpenOptions,
+} from './serial/types.js';
+export { SerialTransportError } from './serial/types.js';
+export { SerialPortTransport, defaultSerialPortFactory } from './serial/transport.js';
+export { FakeTransport, type ExpectedWrite } from './serial/fakeTransport.js';
 
 /** Placeholder readiness flag so the package exposes a real, importable symbol. */
 export const SENDER_CORE_READY = false;

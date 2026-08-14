@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsc"
+    "build": "tsc",
+    "check:targets": "tsc && node scripts/check-targets.ts"
   },
   "dependencies": {
     "react": "^19.0.0",

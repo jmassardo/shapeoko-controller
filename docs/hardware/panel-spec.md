@@ -168,22 +168,27 @@ reports **all** failures, not just the first:
 The toolchain is **isolated** under `hardware/` with its own `pyproject.toml`
 (pinning `pyyaml` + `jsonschema`); it is not coupled to the Node workspaces or
 PlatformIO. Use a virtual environment inside `hardware/` (do not install into
-system Python):
+system Python). These commands mirror exactly what the `hardware` job in
+`.github/workflows/ci.yml` runs (CI skips the venv only because the runner is
+already isolated) — **CI pins Python to 3.12**, so use that locally for parity:
 
 ```bash
 cd hardware
 python3 -m venv .venv
-./.venv/bin/python -m pip install -e ".[dev]"
+./.venv/bin/pip install -e ".[dev]"
 
-# validate the committed spec (prints the control count, exits 0 when valid)
-./.venv/bin/python tools/validate_panel_spec.py
-
-# run the validator unit tests
+# run the full hardware suite (CI asserts exactly 92 tests pass)
 ./.venv/bin/python -m pytest
+
+# validate the committed spec (prints the control count, exits 0 when valid).
+# CI runs this as its own dedicated step, passing the spec path explicitly:
+./.venv/bin/python tools/validate_panel_spec.py panel-spec.yaml
 ```
 
 The validator exits `0` and prints `VALID: panel spec OK, N controls.` when the
-spec is valid; any failure exits non-zero and prints each problem.
+spec is valid; any failure exits non-zero and prints each problem. The pytest
+suite is **92 tests**; CI asserts that exact count so a silently dropped test
+fails the build.
 
 ## Editing checklist
 

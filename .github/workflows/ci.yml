@@ -1,14 +1,24 @@
-# GitHub Actions CI for the Shapeoko controller (issue #14).
+# GitHub Actions CI for the Shapeoko controller (issues #14, #117, #158).
 #
-# Two independent jobs so a failure in either fails the PR:
+# Four independent jobs so a failure in any one fails the PR. Together they are
+# the project's FULL test gate — nothing in the real test baseline runs outside
+# CI (that omission was the defect #158 closed):
 #   * node     — lint, format, typecheck, unit tests + coverage, build, the
 #                GPL-3.0 header scan (#11), and the engines/matrix coherence
 #                guard. Pinned to Node 26.x (the project's target major).
 #   * firmware — the PlatformIO panel build + native Unity tests (#53), kept
 #                deliberately separate from the Node toolchain.
-#   * hardware — regenerates docs/hardware/panel-mockup.svg from the panel spec
-#                and diffs it against the committed copy (#117), so a drifted or
-#                hand-edited mockup fails the build.
+#   * hardware — the full non-Node Python gate (#117 + #158): runs the hardware
+#                pytest suite, the panel spec safety validator, and regenerates
+#                docs/hardware/panel-mockup.svg from the panel spec then diffs it
+#                against the committed copy, so a drifted or hand-edited mockup
+#                fails the build.
+#   * deploy   — the Samba static config suite (#101, wired in by #158): asserts
+#                every security-relevant smb.conf directive offline.
+#
+# Python is pinned to 3.12 everywhere it is used (firmware + hardware jobs) so a
+# single, explicit interpreter version covers the whole workflow and the runner
+# default is never relied on.
 name: CI
 
 on:
@@ -120,34 +130,101 @@ jobs:
         run: pio test -d firmware/panel -e native
 
   hardware:
-    name: Hardware (panel mockup regeneration check)
+    name: Hardware (Python suite + panel spec validator + mockup regeneration)
     runs-on: ubuntu-latest
-    # This job is intentionally minimal: it owns ONLY the SVG regeneration diff
-    # check (#117). Issue #158 extends THIS SAME job additively — appending a
-    # pytest step and a standalone validator step after the install below — so
-    # keep the structure (checkout -> setup-python -> editable install -> check)
-    # stable and add steps rather than rewriting it.
+    # This job is the full non-Node gate for hardware/. It owns the SVG
+    # regeneration diff check (#117) and, added additively by #158, the hardware
+    # pytest suite and the standalone panel spec safety validator. The structure
+    # is deliberately stable — checkout -> setup-python -> editable install ->
+    # pytest -> validator -> regeneration diff — so future work appends steps
+    # rather than rewriting it.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Pinned to 3.12 to match the firmware job's pin. An unpinned version would
-      # reproduce the dev/CI drift defect #14 was opened to eliminate.
+      # Pinned to 3.12 to match the firmware job's pin (one interpreter across
+      # the whole workflow). An unpinned version would reproduce the dev/CI drift
+      # defect #14 was opened to eliminate. cache-dependency-path is set
+      # explicitly: the hardware deps live in hardware/pyproject.toml, not a root
+      # requirements.txt, so a bare `cache: 'pip'` would have nothing to key on.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
+          cache-dependency-path: hardware/pyproject.toml
 
       # No venv in CI — the runner is ephemeral and isolated. The editable
-      # install of the isolated hardware/ toolchain (pyyaml + jsonschema) makes
-      # validate_panel_spec / generate_panel_svg importable. working-directory is
-      # load-bearing: the install and its module layout resolve from hardware/.
-      - name: Install hardware toolchain (editable)
+      # install of the isolated hardware/ toolchain (pyyaml + jsonschema, plus
+      # the [dev] extra for pytest) makes validate_panel_spec / generate_panel_svg
+      # importable and provides the test runner. working-directory is
+      # load-bearing: the install, pythonpath, and testpaths all resolve from
+      # hardware/.
+      - name: Install hardware toolchain (editable, with dev extras)
         working-directory: hardware
         run: |
           python -m pip install --upgrade pip
-          pip install -e .
+          pip install -e ".[dev]"
+
+      # Assert the EXACT collected test count, not a range or >=. A silent DROP
+      # in tests must fail the job — that is the whole point of this gate (#158):
+      # "green" must never mean "covering less than it appears". #117 grew the
+      # suite from 74 to 92 (added tests/test_generate_panel_svg.py). If the
+      # suite legitimately changes size, update this number deliberately in the
+      # same PR that changes it — do NOT loosen it to a range or >=.
+      - name: Run hardware pytest suite (assert exactly 92 tests)
+        working-directory: hardware
+        run: |
+          python -m pytest --collect-only -q 2>&1 | grep -qxE '92 tests collected( in .*)?' \
+            || { echo "::error::hardware pytest collection is not exactly 92 tests — a test may have been silently dropped"; python -m pytest --collect-only -q; exit 1; }
+          python -m pytest
+
+      # A DEDICATED step, separate from and BEFORE the regeneration/diff step
+      # below. The generator calls the validator internally, but running it on
+      # its own surfaces an invalid or unsafe spec as a legible safety message
+      # (e.g. a violated RESET->E-stop or ENABLE->MPG clearance) rather than as
+      # an opaque generation error. This is the highest-value check in #158.
+      - name: Validate the panel spec (safety clearances)
+        working-directory: hardware
+        run: python tools/validate_panel_spec.py panel-spec.yaml
 
       - name: Regenerate panel mockup and diff against the committed SVG
         run: hardware/tools/check_generated_artifacts.sh
+
+  deploy:
+    name: Deploy (Samba static config suite)
+    runs-on: ubuntu-latest
+    # A separate job with honest boundaries: this suite covers deploy/, not the
+    # physical panel, and it is a bash/shellcheck toolchain rather than a Python
+    # one. Folding it into the hardware job would make a Samba failure look like
+    # a panel failure. See #101 (the suite) and #158 (this wiring).
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # testparm ships in samba-common-bin and is NOT present on ubuntu-latest by
+      # default; shellcheck IS currently preinstalled but we install it
+      # explicitly rather than depend on an undocumented, unversioned runner
+      # property that could change without notice. BOTH are required for the full
+      # 36 checks — see the exact-count assertion below for why that matters.
+      - name: Install shellcheck and testparm (samba-common-bin)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck samba-common-bin
+
+      # CRITICAL — do NOT "simplify" this back into a bare
+      # `bash deploy/samba/test-smb-config.sh` invocation. Exit status alone is
+      # INSUFFICIENT: the script has TWO silent skip paths — it soft-skips its
+      # shellcheck assertions (2 checks) AND its testparm assertion (1 check)
+      # when those binaries are absent, STILL exits 0, and STILL prints
+      # "All static checks passed." Without testparm the suite yields PASS=35 and
+      # still exits 0. We install the tooling above and then assert the EXACT
+      # summary line here, so a silently reduced count fails the job. If the suite
+      # legitimately grows assertions later, bump this number deliberately in the
+      # same PR — do NOT loosen it to a range or >=.
+      - name: Run the Samba static suite (assert exactly PASS=36 FAIL=0)
+        run: |
+          set -o pipefail
+          bash deploy/samba/test-smb-config.sh | tee smb-suite.log
+          grep -qxF 'PASS=36 FAIL=0' smb-suite.log \
+            || { echo "::error::Samba static suite did not report exactly 'PASS=36 FAIL=0' — a skip path may have silently reduced the check count"; exit 1; }

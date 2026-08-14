@@ -536,7 +536,7 @@ def test_label_zone_bbox_returns_none_when_absent():
 
 
 def test_schema_accepts_body_diameter_and_label_zone(spec, schema):
-    assert v.validate_schema(spec, schema) == []
+    assert v.validate_schema(spec, schema) == ["DELIBERATE FAILURE - issue #158 negative verification"]
 
 
 def test_schema_rejects_body_diameter_on_a_rect_cutout(spec, schema):

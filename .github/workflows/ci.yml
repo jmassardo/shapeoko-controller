@@ -6,6 +6,9 @@
 #                guard. Pinned to Node 26.x (the project's target major).
 #   * firmware — the PlatformIO panel build + native Unity tests (#53), kept
 #                deliberately separate from the Node toolchain.
+#   * hardware — regenerates docs/hardware/panel-mockup.svg from the panel spec
+#                and diffs it against the committed copy (#117), so a drifted or
+#                hand-edited mockup fails the build.
 name: CI
 
 on:
@@ -115,3 +118,36 @@ jobs:
 
       - name: Run native Unity tests
         run: pio test -d firmware/panel -e native
+
+  hardware:
+    name: Hardware (panel mockup regeneration check)
+    runs-on: ubuntu-latest
+    # This job is intentionally minimal: it owns ONLY the SVG regeneration diff
+    # check (#117). Issue #158 extends THIS SAME job additively — appending a
+    # pytest step and a standalone validator step after the install below — so
+    # keep the structure (checkout -> setup-python -> editable install -> check)
+    # stable and add steps rather than rewriting it.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Pinned to 3.12 to match the firmware job's pin. An unpinned version would
+      # reproduce the dev/CI drift defect #14 was opened to eliminate.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      # No venv in CI — the runner is ephemeral and isolated. The editable
+      # install of the isolated hardware/ toolchain (pyyaml + jsonschema) makes
+      # validate_panel_spec / generate_panel_svg importable. working-directory is
+      # load-bearing: the install and its module layout resolve from hardware/.
+      - name: Install hardware toolchain (editable)
+        working-directory: hardware
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Regenerate panel mockup and diff against the committed SVG
+        run: hardware/tools/check_generated_artifacts.sh

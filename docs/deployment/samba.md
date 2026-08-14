@@ -187,8 +187,15 @@ This runs `bash -n`, `shellcheck` (if installed), renders `smb.conf` and asserts
 every security-relevant directive, verifies the installer's fail-closed
 invariants and ordering, and runs `testparm -s` if Samba is available.
 
-> This script is **not yet wired to CI** — wiring the repo's first CI test runner
-> is issue #14. Until then, run it manually before committing changes here.
+> This static suite **now runs in CI** — the `deploy` job in
+> `.github/workflows/ci.yml` (wired in by #158). CI installs `shellcheck` **and**
+> `samba-common-bin` (which provides `testparm`) before running it and asserts
+> the summary is exactly `PASS=36 FAIL=0`. Both tools are required for the full
+> **36** checks: the script soft-skips its `shellcheck` and `testparm` assertions
+> when those binaries are absent, reports **fewer** checks (e.g. `PASS=35` with no
+> `testparm`), and **still exits 0** — so CI asserts the exact count rather than
+> trusting the exit status. Run it manually before committing changes here too;
+> on a host missing `shellcheck`/`testparm` you will see a lower count.
 
 ### Owner verification — ON THE PI ONLY
 

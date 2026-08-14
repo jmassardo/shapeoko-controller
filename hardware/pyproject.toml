@@ -3,6 +3,11 @@ name = "shapeoko-hardware"
 version = "0.1.0"
 description = "Panel spec schema validation for the Shapeoko controller (isolated hardware toolchain)."
 requires-python = ">=3.11"
+# CI pins Python to 3.12 (see the `hardware` and `firmware` jobs in
+# .github/workflows/ci.yml). This floor stays unbounded on purpose — bounding it
+# is a deliberate decision tracked in #159, not a reflex bump — but 3.12 is the
+# exact minor the gate runs against, recorded here so a reader sees the intended
+# version rather than inferring it.
 # Pinned runtime dependencies for the panel-spec validator. This toolchain is
 # deliberately ISOLATED from the Node/TypeScript workspaces and PlatformIO — it
 # lives entirely under hardware/ and is not a member of any Node workspace.

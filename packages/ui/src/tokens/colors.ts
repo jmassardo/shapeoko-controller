@@ -221,11 +221,35 @@ export interface ColorPair {
   readonly usage: string;
 }
 
-/** Build the approved status-on-surface pairs for one background surface. */
-function statusPairsOn(background: string, surfaceName: string): ColorPair[] {
+/**
+ * The surfaces a status foreground may LEGALLY sit on, in registry order. This
+ * readonly tuple is the SINGLE SOURCE OF TRUTH that drives the status half of
+ * `APPROVED_PAIRS` (via `statusPairsOn`), so the approved registry and this rule
+ * can never drift apart: widening the rule means editing this tuple, which
+ * immediately widens the pairs the contrast gate measures.
+ *
+ * WHY `overlay` is deliberately EXCLUDED: the current status palette does not
+ * clear the >= 7:1 contrast floor against `SURFACE.overlay`. The `alarm`
+ * foreground (`#FF7C7C`) measures ~6.28:1 there — below 7:1. Status badges must
+ * therefore NOT be placed on overlay surfaces (menus, dialogs, transient
+ * overlays) until the status palette is re-tuned to clear 7:1 on `overlay`.
+ *
+ * This is not a matter of reviewer memory: the negative guard in
+ * `contrast.test.ts` fails the suite if `overlay` is added here or if any status
+ * foreground is paired with `overlay` in the registry, AND it fails if the
+ * palette is ever re-tuned so every status DOES clear 7:1 on `overlay` (forcing
+ * a deliberate revisit of this restriction).
+ */
+export const STATUS_ALLOWED_SURFACES = ['canvas', 'panel'] as const satisfies readonly SurfaceKey[];
+
+/** Union of the surface keys a status foreground may legally sit on. */
+export type StatusSurfaceKey = (typeof STATUS_ALLOWED_SURFACES)[number];
+
+/** Build the approved status-on-surface pairs for one allowed background surface. */
+function statusPairsOn(surfaceName: StatusSurfaceKey): ColorPair[] {
   return (Object.keys(STATUS_TOKENS) as StatusKey[]).map((key) => ({
     foreground: STATUS_TOKENS[key].color,
-    background,
+    background: SURFACE[surfaceName],
     usage: `${key} status on ${surfaceName}`,
   }));
 }
@@ -233,7 +257,9 @@ function statusPairsOn(background: string, surfaceName: string): ColorPair[] {
 /**
  * Every approved foreground/background pairing in the design system, enumerated
  * exhaustively. Text tokens are approved on every surface; each status colour is
- * approved on `canvas` and `panel` (the two surfaces a status badge may sit on).
+ * approved only on the surfaces listed in `STATUS_ALLOWED_SURFACES` (`canvas`
+ * and `panel` — the two surfaces a status badge may sit on; `overlay` is
+ * excluded, see that tuple for why).
  */
 export const APPROVED_PAIRS: readonly ColorPair[] = [
   // Body/primary text on every surface.
@@ -248,7 +274,6 @@ export const APPROVED_PAIRS: readonly ColorPair[] = [
   { foreground: TEXT.disabled, background: SURFACE.canvas, usage: 'disabled text on canvas' },
   { foreground: TEXT.disabled, background: SURFACE.panel, usage: 'disabled text on panel' },
   { foreground: TEXT.disabled, background: SURFACE.overlay, usage: 'disabled text on overlay' },
-  // Every status foreground on canvas and panel.
-  ...statusPairsOn(SURFACE.canvas, 'canvas'),
-  ...statusPairsOn(SURFACE.panel, 'panel'),
+  // Every status foreground on each allowed surface (canvas and panel only).
+  ...STATUS_ALLOWED_SURFACES.flatMap((surfaceName) => statusPairsOn(surfaceName)),
 ];

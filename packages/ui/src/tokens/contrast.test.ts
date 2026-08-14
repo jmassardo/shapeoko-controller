@@ -16,7 +16,14 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { APPROVED_PAIRS, INITIAL_STATUS, STATUS_TOKENS, type StatusKey } from './colors.js';
+import {
+  APPROVED_PAIRS,
+  INITIAL_STATUS,
+  STATUS_ALLOWED_SURFACES,
+  STATUS_TOKENS,
+  SURFACE,
+  type StatusKey,
+} from './colors.js';
 import {
   BODY_MIN_PX,
   DENSITY,
@@ -110,6 +117,41 @@ describe('approved foreground/background pairings', () => {
   it('would fail the gate for a genuinely low-contrast pair', () => {
     // Proves the gate has teeth: a near-invisible pair is far below 7:1.
     expect(contrastRatio('#333333', '#2A2A2A')).toBeLessThan(CONTRAST_FLOOR);
+  });
+});
+
+describe('status foregrounds are gated OFF overlay surfaces', () => {
+  // This block is the machine-enforced form of the canvas/panel-only rule
+  // documented on `STATUS_ALLOWED_SURFACES`. It asserts BOTH directions so it
+  // cannot rot into a tautology, and it asserts the MEASURED reason so the guard
+  // can never silently outlive its own justification: if the palette is ever
+  // re-tuned so every status clears 7:1 on `overlay`, the final assertion fails
+  // and forces a deliberate revisit of the registry and the allow-list.
+  const statusKeys = Object.keys(STATUS_TOKENS) as StatusKey[];
+  const statusColors = new Set<string>(statusKeys.map((key) => STATUS_TOKENS[key].color));
+
+  it('lists only canvas and panel as allowed status surfaces (overlay excluded)', () => {
+    expect([...STATUS_ALLOWED_SURFACES]).toStrictEqual(['canvas', 'panel']);
+    expect(STATUS_ALLOWED_SURFACES).not.toContain('overlay');
+  });
+
+  it('approves NO status foreground paired with SURFACE.overlay', () => {
+    const statusOnOverlay = APPROVED_PAIRS.filter(
+      (pair) => pair.background === SURFACE.overlay && statusColors.has(pair.foreground),
+    );
+    expect(statusOnOverlay).toStrictEqual([]);
+  });
+
+  it('is justified: at least one status genuinely FAILS 7:1 on overlay (alarm ~= 6.28:1)', () => {
+    // Measured reason the exclusion exists. `alarm` (#FF7C7C) on SURFACE.overlay
+    // computes ~6.28:1 < 7:1. If a re-tune ever makes EVERY status clear 7:1 on
+    // overlay, this expectation fails, forcing the allow-list to be widened
+    // deliberately rather than by accident.
+    const failingOnOverlay = statusKeys.filter(
+      (key) => contrastRatio(STATUS_TOKENS[key].color, SURFACE.overlay) < CONTRAST_FLOOR,
+    );
+    expect(failingOnOverlay).toContain('alarm');
+    expect(contrastRatio(STATUS_TOKENS.alarm.color, SURFACE.overlay)).toBeCloseTo(6.28, 2);
   });
 });
 

@@ -172,6 +172,10 @@ jobs:
       # suite from 74 to 92 (added tests/test_generate_panel_svg.py). If the
       # suite legitimately changes size, update this number deliberately in the
       # same PR that changes it — do NOT loosen it to a range or >=.
+      #
+      # Note: this step deliberately does NOT `set -o pipefail`. `grep -q` closes
+      # the pipe on its first match, which would surface as SIGPIPE (141) from
+      # pytest under pipefail and fail the job spuriously. Do not add it here.
       - name: Run hardware pytest suite (assert exactly 92 tests)
         working-directory: hardware
         run: |
